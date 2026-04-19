@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MailSenderApp", "MailSender
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MailSenderApp2", "MailSenderApp2\MailSenderApp2.csproj", "{AABF88AA-2A3C-8E3A-EB87-2595889DE730}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyMailApi", "MyMailApi\MyMailApi.csproj", "{E30F408A-21E0-4E4E-8F7D-19E66BF640C4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{AABF88AA-2A3C-8E3A-EB87-2595889DE730}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AABF88AA-2A3C-8E3A-EB87-2595889DE730}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AABF88AA-2A3C-8E3A-EB87-2595889DE730}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E30F408A-21E0-4E4E-8F7D-19E66BF640C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E30F408A-21E0-4E4E-8F7D-19E66BF640C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E30F408A-21E0-4E4E-8F7D-19E66BF640C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E30F408A-21E0-4E4E-8F7D-19E66BF640C4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

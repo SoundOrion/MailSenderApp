@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MyMailApi.Application.Abstractions;
 using MyMailApi.Contracts;
-using MyMailApi.Domain;
 
 namespace MyMailApi.Controllers;
 
@@ -9,62 +8,31 @@ namespace MyMailApi.Controllers;
 [Route("api/[controller]")]
 public sealed class MailController : ControllerBase
 {
-    private readonly IMailSender _mailSender;
-    private readonly IMailQueue _mailQueue;
-    private readonly IConfiguration _configuration;
+    private readonly IMailApplicationService _mailApplicationService;
 
-    public MailController(
-        IMailSender mailSender,
-        IMailQueue mailQueue,
-        IConfiguration configuration)
+    public MailController(IMailApplicationService mailApplicationService)
     {
-        _mailSender = mailSender;
-        _mailQueue = mailQueue;
-        _configuration = configuration;
+        _mailApplicationService = mailApplicationService;
     }
 
     [HttpPost("send")]
+    [ProducesResponseType(typeof(SendMailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SendMailResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendAsync(
         [FromBody] SendMailRequest request,
         CancellationToken cancellationToken)
     {
         try
         {
-            ValidateRequest(request);
+            var response = await _mailApplicationService.SendAsync(request, cancellationToken);
 
-            var message = MapToDomain(request);
-
-            var defaultModeText = _configuration["MailDispatch:DefaultMode"] ?? "Direct";
-            var defaultMode = Enum.TryParse<MailDispatchMode>(
-                defaultModeText,
-                ignoreCase: true,
-                out var parsedMode)
-                ? parsedMode
-                : MailDispatchMode.Direct;
-
-            var mode = request.Mode ?? defaultMode;
-
-            switch (mode)
+            if (string.Equals(response.Mode, "Queued", StringComparison.OrdinalIgnoreCase))
             {
-                case MailDispatchMode.Queued:
-                    EnsureQueueSafe(message);
-                    await _mailQueue.EnqueueAsync(message, cancellationToken);
-
-                    return Accepted(new
-                    {
-                        message = "Mail queued.",
-                        mode = mode.ToString()
-                    });
-
-                default:
-                    await _mailSender.SendAsync(message, cancellationToken);
-
-                    return Ok(new
-                    {
-                        message = "Mail sent.",
-                        mode = mode.ToString()
-                    });
+                return Accepted(response);
             }
+
+            return Ok(response);
         }
         catch (FormatException ex)
         {
@@ -81,71 +49,149 @@ public sealed class MailController : ControllerBase
             });
         }
     }
-
-    private static MailMessageData MapToDomain(SendMailRequest request)
-    {
-        var attachments = request.Attachments
-            .Select(a => MailAttachment.FromBytes(
-                a.FileName,
-                Convert.FromBase64String(a.Base64Data),
-                a.ContentType))
-            .ToArray();
-
-        return new MailMessageData
-        {
-            To = request.To,
-            Cc = request.Cc,
-            Bcc = request.Bcc,
-            Subject = request.Subject,
-            TextBody = request.TextBody,
-            HtmlBody = request.HtmlBody,
-            Priority = request.Priority,
-            Attachments = attachments
-        };
-    }
-
-    private static void ValidateRequest(SendMailRequest request)
-    {
-        if (request.To.Count == 0 && request.Cc.Count == 0 && request.Bcc.Count == 0)
-        {
-            throw new InvalidOperationException("宛先がありません。");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Subject))
-        {
-            throw new InvalidOperationException("件名がありません。");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.TextBody) &&
-            string.IsNullOrWhiteSpace(request.HtmlBody))
-        {
-            throw new InvalidOperationException("TextBody または HtmlBody のどちらかが必要です。");
-        }
-
-        foreach (var attachment in request.Attachments)
-        {
-            if (string.IsNullOrWhiteSpace(attachment.FileName))
-            {
-                throw new InvalidOperationException("添付ファイル名がありません。");
-            }
-
-            if (string.IsNullOrWhiteSpace(attachment.Base64Data))
-            {
-                throw new InvalidOperationException(
-                    $"添付 '{attachment.FileName}' の Base64Data がありません。");
-            }
-        }
-    }
-
-    private static void EnsureQueueSafe(MailMessageData message)
-    {
-        foreach (var attachment in message.Attachments)
-        {
-            if (attachment.ContentStream is not null)
-            {
-                throw new InvalidOperationException(
-                    "キュー送信では Stream 添付は使えません。byte[] を使ってください。");
-            }
-        }
-    }
 }
+
+//[ApiController]
+//[Route("api/[controller]")]
+//public sealed class MailController : ControllerBase
+//{
+//    private readonly IMailSender _mailSender;
+//    private readonly IMailQueue _mailQueue;
+//    private readonly IConfiguration _configuration;
+
+//    public MailController(
+//        IMailSender mailSender,
+//        IMailQueue mailQueue,
+//        IConfiguration configuration)
+//    {
+//        _mailSender = mailSender;
+//        _mailQueue = mailQueue;
+//        _configuration = configuration;
+//    }
+
+//    [HttpPost("send")]
+//    public async Task<IActionResult> SendAsync(
+//        [FromBody] SendMailRequest request,
+//        CancellationToken cancellationToken)
+//    {
+//        try
+//        {
+//            ValidateRequest(request);
+
+//            var message = MapToDomain(request);
+
+//            var defaultModeText = _configuration["MailDispatch:DefaultMode"] ?? "Direct";
+//            var defaultMode = Enum.TryParse<MailDispatchMode>(
+//                defaultModeText,
+//                ignoreCase: true,
+//                out var parsedMode)
+//                ? parsedMode
+//                : MailDispatchMode.Direct;
+
+//            var mode = request.Mode ?? defaultMode;
+
+//            switch (mode)
+//            {
+//                case MailDispatchMode.Queued:
+//                    EnsureQueueSafe(message);
+//                    await _mailQueue.EnqueueAsync(message, cancellationToken);
+
+//                    return Accepted(new
+//                    {
+//                        message = "Mail queued.",
+//                        mode = mode.ToString()
+//                    });
+
+//                default:
+//                    await _mailSender.SendAsync(message, cancellationToken);
+
+//                    return Ok(new
+//                    {
+//                        message = "Mail sent.",
+//                        mode = mode.ToString()
+//                    });
+//            }
+//        }
+//        catch (FormatException ex)
+//        {
+//            return BadRequest(new
+//            {
+//                error = $"Base64 の形式が不正です: {ex.Message}"
+//            });
+//        }
+//        catch (Exception ex)
+//        {
+//            return BadRequest(new
+//            {
+//                error = ex.Message
+//            });
+//        }
+//    }
+
+//    private static MailMessageData MapToDomain(SendMailRequest request)
+//    {
+//        var attachments = request.Attachments
+//            .Select(a => MailAttachment.FromBytes(
+//                a.FileName,
+//                Convert.FromBase64String(a.Base64Data),
+//                a.ContentType))
+//            .ToArray();
+
+//        return new MailMessageData
+//        {
+//            To = request.To,
+//            Cc = request.Cc,
+//            Bcc = request.Bcc,
+//            Subject = request.Subject,
+//            TextBody = request.TextBody,
+//            HtmlBody = request.HtmlBody,
+//            Priority = request.Priority,
+//            Attachments = attachments
+//        };
+//    }
+
+//    private static void ValidateRequest(SendMailRequest request)
+//    {
+//        if (request.To.Count == 0 && request.Cc.Count == 0 && request.Bcc.Count == 0)
+//        {
+//            throw new InvalidOperationException("宛先がありません。");
+//        }
+
+//        if (string.IsNullOrWhiteSpace(request.Subject))
+//        {
+//            throw new InvalidOperationException("件名がありません。");
+//        }
+
+//        if (string.IsNullOrWhiteSpace(request.TextBody) &&
+//            string.IsNullOrWhiteSpace(request.HtmlBody))
+//        {
+//            throw new InvalidOperationException("TextBody または HtmlBody のどちらかが必要です。");
+//        }
+
+//        foreach (var attachment in request.Attachments)
+//        {
+//            if (string.IsNullOrWhiteSpace(attachment.FileName))
+//            {
+//                throw new InvalidOperationException("添付ファイル名がありません。");
+//            }
+
+//            if (string.IsNullOrWhiteSpace(attachment.Base64Data))
+//            {
+//                throw new InvalidOperationException(
+//                    $"添付 '{attachment.FileName}' の Base64Data がありません。");
+//            }
+//        }
+//    }
+
+//    private static void EnsureQueueSafe(MailMessageData message)
+//    {
+//        foreach (var attachment in message.Attachments)
+//        {
+//            if (attachment.ContentStream is not null)
+//            {
+//                throw new InvalidOperationException(
+//                    "キュー送信では Stream 添付は使えません。byte[] を使ってください。");
+//            }
+//        }
+//    }
+//}

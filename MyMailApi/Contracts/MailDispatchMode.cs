@@ -1,6 +1,7 @@
-﻿namespace MyMailApi.Contracts
+﻿namespace MyMailApi.Contracts;
+
+public enum MailDispatchMode
 {
-    public class MailDispatchMode
-    {
-    }
+    Direct,
+    Queued
 }
