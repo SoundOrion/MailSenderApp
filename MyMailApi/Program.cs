@@ -4,6 +4,7 @@ using MyMailApi.Application.Services;
 using MyMailApi.Domain;
 using MyMailApi.Endpoints;
 using MyMailApi.Infrastructure.Mail;
+using MyMailApi.Infrastructure.Middleware;
 using MyMailApi.Infrastructure.Queue;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -49,6 +50,8 @@ else
 }
 
 var app = builder.Build();
+
+//app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI();

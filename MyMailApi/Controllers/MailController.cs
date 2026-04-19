@@ -51,6 +51,44 @@ public sealed class MailController : ControllerBase
     }
 }
 
+using Microsoft.AspNetCore.Mvc;
+using MyMailApi.Application.Abstractions;
+using MyMailApi.Contracts;
+
+namespace MyMailApi.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class MailController : ControllerBase
+{
+    private readonly IMailApplicationService _mailApplicationService;
+
+    public MailController(IMailApplicationService mailApplicationService)
+    {
+        _mailApplicationService = mailApplicationService;
+    }
+
+    [HttpPost("send")]
+    [ProducesResponseType(typeof(SendMailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SendMailResponse), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> SendAsync(
+        [FromBody] SendMailRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _mailApplicationService.SendAsync(request, cancellationToken);
+
+        if (string.Equals(response.Mode, "Queued", StringComparison.OrdinalIgnoreCase))
+        {
+            return Accepted(response);
+        }
+
+        return Ok(response);
+    }
+}
+
+
 //[ApiController]
 //[Route("api/[controller]")]
 //public sealed class MailController : ControllerBase
