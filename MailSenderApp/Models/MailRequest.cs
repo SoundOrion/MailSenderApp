@@ -13,5 +13,5 @@ public sealed class MailRequest
 
     public MailPriorityLevel Priority { get; init; } = MailPriorityLevel.Normal;
 
-    public IReadOnlyList<string> AttachmentPaths { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<MailAttachment> Attachments { get; init; } = Array.Empty<MailAttachment>();
 }

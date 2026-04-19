@@ -1,8 +1,10 @@
 ﻿using MailKit.Net.Smtp;
 using MailKit.Security;
 using MailSenderApp.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using MimeKit.Utils;
 
 namespace MailSenderApp.Services;
 
@@ -23,7 +25,7 @@ public sealed class MailService : IMailService
     {
         ValidateRequest(request);
 
-        var message = CreateMessage(request);
+        using var message = CreateMessage(request);
 
         using var client = new SmtpClient();
 
@@ -49,11 +51,10 @@ public sealed class MailService : IMailService
             await client.SendAsync(message, cancellationToken);
 
             _logger.LogInformation(
-                "メール送信成功: Subject={Subject}, To={ToCount}, Cc={CcCount}, Bcc={BccCount}",
+                "メール送信成功: Subject={Subject}, To={ToCount}, Attachments={AttachmentCount}",
                 request.Subject,
                 request.To.Count,
-                request.Cc.Count,
-                request.Bcc.Count);
+                request.Attachments.Count);
         }
         catch (Exception ex)
         {
@@ -76,19 +77,13 @@ public sealed class MailService : IMailService
         message.From.Add(new MailboxAddress(_settings.DisplayName, _settings.UserName));
 
         foreach (var to in request.To)
-        {
             message.To.Add(MailboxAddress.Parse(to));
-        }
 
         foreach (var cc in request.Cc)
-        {
             message.Cc.Add(MailboxAddress.Parse(cc));
-        }
 
         foreach (var bcc in request.Bcc)
-        {
             message.Bcc.Add(MailboxAddress.Parse(bcc));
-        }
 
         message.Subject = request.Subject;
 
@@ -100,19 +95,75 @@ public sealed class MailService : IMailService
             HtmlBody = request.HtmlBody
         };
 
-        foreach (var filePath in request.AttachmentPaths)
+        foreach (var attachment in request.Attachments)
         {
-            if (!File.Exists(filePath))
-            {
-                throw new FileNotFoundException($"添付ファイルが見つかりません: {filePath}", filePath);
-            }
-
-            bodyBuilder.Attachments.Add(filePath);
+            AddAttachment(bodyBuilder, attachment);
         }
 
         message.Body = bodyBuilder.ToMessageBody();
 
         return message;
+    }
+
+    private static void AddAttachment(BodyBuilder bodyBuilder, MailAttachment attachment)
+    {
+        attachment.Validate();
+
+        MimeEntity mimeAttachment;
+
+        if (attachment.Data is not null)
+        {
+            mimeAttachment = bodyBuilder.Attachments.Add(
+                attachment.FileName,
+                attachment.Data,
+                GetContentType(attachment.ContentType));
+        }
+        else if (attachment.ContentStream is not null)
+        {
+            if (attachment.ContentStream.CanSeek)
+            {
+                attachment.ContentStream.Position = 0;
+            }
+
+            mimeAttachment = bodyBuilder.Attachments.Add(
+                attachment.FileName,
+                attachment.ContentStream,
+                GetContentType(attachment.ContentType));
+        }
+        else if (!string.IsNullOrWhiteSpace(attachment.FilePath))
+        {
+            if (!File.Exists(attachment.FilePath))
+            {
+                throw new FileNotFoundException(
+                    $"添付ファイルが見つかりません: {attachment.FilePath}",
+                    attachment.FilePath);
+            }
+
+            mimeAttachment = bodyBuilder.Attachments.Add(
+                attachment.FileName,
+                File.ReadAllBytes(attachment.FilePath),
+                GetContentType(attachment.ContentType));
+        }
+        else
+        {
+            throw new InvalidOperationException("添付ファイルのソースが不正です。");
+        }
+
+        if (mimeAttachment is MimePart part)
+        {
+            part.ContentDisposition = new ContentDisposition(ContentDisposition.Attachment);
+            part.FileName = attachment.FileName;
+        }
+    }
+
+    private static ContentType GetContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return new ContentType("application", "octet-stream");
+        }
+
+        return ContentType.Parse(contentType);
     }
 
     private static void ValidateRequest(MailRequest request)
@@ -133,6 +184,11 @@ public sealed class MailService : IMailService
         if (!hasText && !hasHtml)
         {
             throw new InvalidOperationException("本文は TextBody または HtmlBody のどちらか一方以上が必要です。");
+        }
+
+        foreach (var attachment in request.Attachments)
+        {
+            attachment.Validate();
         }
     }
 
